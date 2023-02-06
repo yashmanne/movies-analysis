@@ -1,0 +1,90 @@
+---
+title: "Project EDA"
+author: "Yash Manne"
+date: "02/04/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tinytex)
+library(knitr)
+library(latex2exp)
+library(tidyverse)
+```
+
+## Data Source
+
+[Data](https://www.kaggle.com/datasets/danielgrijalvas/movies?resource=download) scraped from IMDb but hosted on Kaggle.
+
+#### Features:
+* `budget`: the budget of a movie. Some movies don't have this, so it appears as 0
+* `company`: the production company
+* `country`: country of origin
+* `director`: the director
+* `genre`: main genre of the movie.
+* `gross`: revenue of the movie
+* `name`: name of the movie
+* `rating`: rating of the movie (R, PG, etc.)
+* `released`: release date (YYYY-MM-DD)
+* `runtime`: duration of the movie
+* `score`: IMDb user rating
+* `votes`: number of user votes
+* `star`: main actor/actress
+* `writer`: writer of the movie
+* `year`: year of release
+
+Consists of 7668 movies from 1980-2020.
+
+```{r}
+df = read.csv('movies.csv')
+```
+
+```{r}
+p1 = df %>% ggplot(mapping = aes(x= gross, y=score)) +
+  geom_point(alpha=0.25) + theme_bw()
+p2 = df %>% ggplot(mapping = aes(x= budget, y=score)) +
+  geom_point(alpha=0.25) + theme_bw()
+p3 = df %>% ggplot(mapping = aes(x= budget, y=gross)) +
+  geom_point(alpha=0.25) + theme_bw()
+p4 = df %>% ggplot(mapping = aes(x= year, y=runtime)) +
+  geom_point(alpha=0.25) + theme_bw()
+
+cowplot::plot_grid(p1,p2,p3,p4,
+  ncol = 2, nrow = 2
+)
+```
+
+
+```{r}
+simpleLinReg <- lm(gross~ budget, data = df)
+summary(simpleLinReg)
+std_errors = sqrt(diag(vcov(simpleLinReg)))
+# percError <- summary(simpleLinReg)$sigma / mean(pros$lcavol) * 100
+```
+
+The estimate of the y-intercept coefficient is `r simpleLinReg$coefficients[1]`, with a standard error of `r std_errors[1]`.
+The estimate of the slope coefficient is `r simpleLinReg$coefficients[2]`, with a standard error of `r std_errors[2]`.
+
+
+### Statistical test of the null hypothesis of no linear association between movie budget and gross revenue.
+
+The **null hypothesis** is that there is no linear association between the predictor variable, `budget`, and the response variable, `gross`, or that the true slope coefficient is 0.
+  
+  $$H_0: \beta_1 = \beta_{1,0}  \text{ or } \beta_1  = 0$$
+  
+The **alternative hypothesis** is that there is a linear association between the predictor variable, `budget`, and the response variable, `gross`, or that the true slope coefficient is not 0.
+
+  $$H_A: \beta_1 \neq \beta_{1,0} \text{ or } \beta_1  \neq 0$$
+  
+Then, we define our test statistic, $T$ as $T = \frac{\hat{\beta_1 - \beta_{1,0}}}{\widehat{SE}(\hat{\beta_1})} = \frac{\hat{\beta_1}}{\widehat{SE}(\hat{\beta_1})}$, where $T \sim t_{n-2}$. In other words $T$ follows a t-distribution with $n-2$ degrees of freedom, where $n$ is the total number of observations. In this case, $n=5436$, so the test statistic has 5434 degrees of freedom. 
+
+```{r}
+b1_statistic = coef(
+  summary(simpleLinReg)
+)[2,]
+b1_statistic[4]
+```
+
+Based on the summary, we can see that the t-statistic for $\beta_1$ is `r b1_statistic[3]` with a p-value of `r b1_statistic[4]`. Since the p-value is less than the significance value of 0.05, we can reject the null hypothesis.
+
