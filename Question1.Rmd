@@ -1,0 +1,227 @@
+---
+title: "Project EDA"
+author: "Yash Manne"
+date: "02/04/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits=5)
+library(tinytex)
+library(knitr)
+library(latex2exp)
+library(tidyverse)
+library(sandwich)
+library(lmtest)
+```
+
+## Data Source
+
+```{r}
+raw_df = read.csv('cleaned_data.csv')
+```
+```{r}
+df = raw_df[raw_df$year>=1990,]
+df$rating = factor(df$rating, levels=c("G", "PG", "PG-13", "R"))
+df$genre = relevel(factor(df$genre), "Other")
+df$binned_director = factor(df$binned_director, levels=c("False", "True"))
+df$binned_writer = factor(df$binned_writer, levels=c("False", "True"))
+df$binned_star = factor(df$binned_star, levels=c("False", "True"))
+df$binned_company = factor(df$binned_company, levels=c("False", "True"))
+# df$is_sequel = as.factor(df$is_sequel)
+# df$is_remake = as.factor(df$is_remake)
+
+df$binROI = df$ROI > 0
+```
+
+```{r}
+p1 = df %>% ggplot(mapping = aes(x= runtime, y=score)) +
+  geom_point(alpha=0.25) + theme_bw()
+p2 = df %>% ggplot(mapping = aes(x= adj_budget, y=score)) +
+  geom_point(alpha=0.25) + theme_bw()
+p3 = df %>% ggplot(mapping = aes(x= adj_budget, y=ROI)) +
+  geom_point(alpha=0.25) + theme_bw()
+p4 = df %>% ggplot(mapping = aes(x= year, y=runtime)) +
+  geom_point(alpha=0.25) + theme_bw()
+
+cowplot::plot_grid(p1,p2,p3,p4,
+  ncol = 2, nrow = 2
+)
+```
+
+## Linear Regression with Score
+
+```{r}
+summary(df$score)
+```
+
+```{r}
+linregScore <- lm(score~ runtime + adj_budget + rating + genre + binned_director 
+             + binned_writer + binned_star + binned_company + is_remake + is_sequel, data = df)
+summary(linregScore)
+plot(linregScore)
+# std_errors = sqrt(diag(vcov(simpleLinReg)))
+# percError <- summary(simpleLinReg)$sigma / mean(pros$lcavol) * 100
+```
+```{r}
+library(car)
+vif(linregScore)
+```
+
+### Robust 
+
+```{r}
+# coeftest(linregScore,vcov=vcovHC)
+summaryLin = coeftest(linregScore, vcov=vcovHC)[,]
+summaryLinDf = as.tibble(summaryLin)
+```
+
+```{r}
+# summaryLin
+```
+
+```{r}
+# coefci(linregScore,vcov=vcovHC)
+summaryLinDf[, "Coefficient"] = c("(Intercept)", "Runtime", "Budget", 
+  "$\\text{Rating}_{\\text{PG}}$", 
+  "$\\text{Rating}_{\\text{PG-13}}$", 
+  "$\\text{Rating}_{\\text{R}}$", 
+  "$\\text{Genre}_{\\text{Action}}$",
+  "$\\text{Genre}_{\\text{Adventure}}$", 
+  "$\\text{Genre}_{\\text{Animation}}$", 
+  "$\\text{Genre}_{\\text{Biography}}$", 
+  "$\\text{Genre}_{\\text{Comedy}}$",
+  "$\\text{Genre}_{\\text{Crime}}$", 
+  "$\\text{Genre}_{\\text{Drama}}$", 
+  "$\\text{Genre}_{\\text{Horror}}$",
+  "$I(\\text{Experienced Director})$",
+  "$I(\\text{Experienced Writer})$",
+  "$I(\\text{Experienced Actor})$",
+  "$I(\\text{Big 5 Production Co.})$",
+  "$I(\\text{Remake})$",
+  "$I(\\text{Sequel})$"
+  )
+ciL1 = coefci(linregScore, vcov=vcovHC)[,1]
+names(ciL1) = summaryLinDf$Coefficient
+summaryLinDf[,'2.5'] = ciL1
+summaryLinDf[,'97.5'] = unname(coefci(linregScore, vcov=vcovHC)[,2])
+
+```
+
+
+```{r}
+kable(data.frame("est" = summaryLinDf$Estimate,
+  "SE1" = summaryLinDf$`Std. Error`,
+  "2.5" = summaryLinDf$`2.5`,
+  "975" = summaryLinDf$`97.5`,
+  # "z" = summaryLogDf$`z value`,
+  'p-val' = summaryLinDf$`Pr(>|t|)`
+  ),
+  col.names = c("Estimate", "Robust SE", "95% CI", "", "p-value"),
+  caption = "Robust Linear Regression for IMDb Score"
+)
+```
+```{r}
+redModLin_genre = lm(score~ runtime+ adj_budget + genre + rating + binned_director 
+             + binned_writer + binned_star + binned_company + is_remake+ is_sequel, data = df)
+waldtest(redModLin_genre, linregScore, vcov=vcovHC)
+```
+
+```{r}
+redModLin_rating = lm(score~ runtime+ adj_budget +genre + binned_director
+             + binned_writer + binned_star+ binned_company, data = df)
+waldtest(redModLin_rating, linregScore, vcov=vcovHC)
+```
+
+## Linear Regression with ROI
+NOT VALID Due to to OUTLIERS
+```{r}
+# linregROI <- lm(ROI~ runtime + adj_budget + rating + genre + binned_director 
+#              + binned_writer + binned_star + binned_company, data = df)
+# summary(linregROI)
+# plot(linregROI)
+```
+
+
+## Log Reg with ROI
+```{r}
+logregROI <- glm(binROI~ runtime + adj_budget + rating + genre + binned_director 
+             + binned_writer + binned_star + binned_company + is_remake + is_sequel, data = df, family = "binomial")
+# summary(logregROI)
+plot(logregROI)
+```
+
+```{r}
+summaryLog = coeftest(logregROI, vcov=vcovHC)[,]
+summaryLogDf = as.tibble(summaryLog)
+
+```
+
+```{r}
+# summaryLog
+# coefci(logregROI, vcov=vcovHC)[,]
+```
+
+```{r}
+summaryLogDf[, "Coefficient"] = c("(Intercept)", "Runtime", "Budget", 
+  "$\\text{Rating}_{\\text{PG}}$", 
+  "$\\text{Rating}_{\\text{PG-13}}$", 
+  "$\\text{Rating}_{\\text{R}}$", 
+  "$\\text{Genre}_{\\text{Action}}$",
+  "$\\text{Genre}_{\\text{Adventure}}$", 
+  "$\\text{Genre}_{\\text{Animation}}$", 
+  "$\\text{Genre}_{\\text{Biography}}$", 
+  "$\\text{Genre}_{\\text{Comedy}}$",
+  "$\\text{Genre}_{\\text{Crime}}$", 
+  "$\\text{Genre}_{\\text{Drama}}$", 
+  "$\\text{Genre}_{\\text{Horror}}$",
+  "$I(\\text{Experienced Director})$",
+  "$I(\\text{Experienced Writer})$",
+  "$I(\\text{Experienced Actor})$",
+  "$I(\\text{Big 5 Production Co.})$",
+  "$I(\\text{Remake})$",
+  "$I(\\text{Sequel})$"
+  )
+ci1 = coefci(logregROI, vcov=vcovHC)[,1]
+names(ci1) = summaryLogDf$Coefficient
+summaryLogDf[,'2.5'] = ci1
+summaryLogDf[,'97.5'] = unname(coefci(logregROI, vcov=vcovHC)[,2])
+
+```
+
+```{r}
+kable(data.frame(
+  # "cof"= summaryLogDf$Coefficient,
+  "est"= summaryLogDf$Estimate,
+  "SE" = summaryLogDf$`Std. Error`,
+  "2.5" = summaryLogDf$`2.5`,
+  "975" = summaryLogDf$`97.5`,
+  # "z" = summaryLogDf$`z value`,
+  'p-val' = summaryLogDf$`Pr(>|z|)`
+  ),
+  col.names = c("Estimate", "Robust SE", "95% CI", "", "p-value"),
+  caption = "Robust Logistic Regression for Positive ROI Classification"
+)
+```
+
+```{r}
+redModLogRating = glm(binROI~ runtime+ adj_budget+genre + binned_director
+             + binned_writer+binned_star + binned_company + is_remake + is_sequel, data = df, family='binomial')
+waldtest(redModLogRating, logregROI, vcov=vcovHC, test = 'Chisq')
+
+redModLogGenre = glm(binROI~ runtime+ adj_budget + rating +binned_director
+             + binned_writer+binned_star + binned_company + is_remake + is_sequel, data = df, family='binomial')
+waldtest(redModLogGenre, logregROI, vcov=vcovHC, test = 'Chisq')
+```
+
+```{r}
+vif(logregROI)
+```
+
+```{r}
+logodds = logregROI$linear.predictors
+plot(df$runtime, logodds)# ~ runtime + adj_budget ,data=df)
+plot(df$adj_budget, logodds)
+```
+
