@@ -14,6 +14,9 @@ library(latex2exp)
 library(tidyverse)
 library(sandwich)
 library(lmtest)
+library(caret)
+library(pROC)
+library(car)
 ```
 
 ## Data Source
@@ -65,7 +68,6 @@ plot(linregScore)
 # percError <- summary(simpleLinReg)$sigma / mean(pros$lcavol) * 100
 ```
 ```{r}
-library(car)
 vif(linregScore)
 ```
 
@@ -123,7 +125,7 @@ kable(data.frame("est" = summaryLinDf$Estimate,
 )
 ```
 ```{r}
-redModLin_genre = lm(score~ runtime+ adj_budget + genre + rating + binned_director 
+redModLin_genre = lm(score~ runtime+ adj_budget + rating + binned_director 
              + binned_writer + binned_star + binned_company + is_remake+ is_sequel, data = df)
 waldtest(redModLin_genre, linregScore, vcov=vcovHC)
 ```
@@ -223,5 +225,13 @@ vif(logregROI)
 logodds = logregROI$linear.predictors
 plot(df$runtime, logodds)# ~ runtime + adj_budget ,data=df)
 plot(df$adj_budget, logodds)
+```
+
+```{r}
+roi_probs = predict(logregROI, type='response')
+roc_score = roc(df$binROI, roi_probs,
+levels = levels(as.factor(df$binROI)),
+direction="<")
+plot(roc_score)
 ```
 
